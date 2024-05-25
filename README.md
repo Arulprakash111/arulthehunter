@@ -1,1 +1,2 @@
 # arulthehunter
+INSTALLATION
