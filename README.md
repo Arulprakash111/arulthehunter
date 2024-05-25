@@ -10,6 +10,7 @@ pip3 install -r requirements.txt
 sudo python3 install.py
 
 USAGE:
+
 usage: arulthehunter.py [-h] [-sv filename.txt] [-s domain.com] [-j domain.com] [-t domain.com] [-d domain.com]
                        [-p domains.txt] [-r domains.txt] [-b domains.txt] [-w https://domain.com]
                        [-wc https://domain.com] [-fi https://domain.com] [-fm https://domain.com]
