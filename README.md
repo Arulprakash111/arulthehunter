@@ -3,9 +3,9 @@
 
 ```bash
 
-git clone https://github.com/gotr00t0day/spyhunt.git
+git clone https://github.com/Arulprakash111/arulthehunter.git
 
-cd spyhunt
+cd arulthehunter
 
 pip3 install -r requirements.txt
 
@@ -16,13 +16,13 @@ sudo python3 install.py
 # USAGE 
 
 ```
-usage: spyhunt.py [-h] [-sv filename.txt] [-s domain.com] [-j domain.com] [-t domain.com] [-d domain.com]
-                  [-p domains.txt] [-r domains.txt] [-b domains.txt] [-w https://domain.com]
-                  [-wc https://domain.com] [-fi https://domain.com] [-fm https://domain.com]
-                  [-na https://domain.com] [-ri IP] [-rim IP] [-sc domain.com] [-co domains.txt]
-                  [-hh domain.com] [-sh domain.com] [-ed domain.com] [-smu domain.com] [-rd domain list]
-                  [-ips domain list] [-dinfo domain list] [-isubs domain list] [-pspider domain.com]
-                  [-nft domains.txt] [-ph domain.txt]
+usage: arulthehunter.py [-h] [-sv filename.txt] [-s domain.com] [-j domain.com] [-t domain.com] [-d domain.com]
+                        [-p domains.txt] [-r domains.txt] [-b domains.txt] [-w https://domain.com]
+                        [-wc https://domain.com] [-fi https://domain.com] [-fm https://domain.com]
+                        [-na https://domain.com] [-ri IP] [-rim IP] [-sc domain.com] [-co domains.txt]
+                        [-hh domain.com] [-sh domain.com] [-ed domain.com] [-smu domain.com] [-rd domain list]
+                        [-ips domain list] [-dinfo domain list] [-isubs domain list] [-pspider domain.com]
+                        [-nft domains.txt] [-ph domain.txt]
 
 options:
   -h, --help            show this help message and exit
