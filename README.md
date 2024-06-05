@@ -1,23 +1,28 @@
-# arulthehunter
-INSTALLATION
 
-gh repo clone Arulprakash111/arulthehunter
+# INSTALLATION
 
-cd arulthehunter
+```bash
+
+git clone https://github.com/gotr00t0day/spyhunt.git
+
+cd spyhunt
 
 pip3 install -r requirements.txt
 
 sudo python3 install.py
 
-USAGE:
+```
 
-usage: arulthehunter.py [-h] [-sv filename.txt] [-s domain.com] [-j domain.com] [-t domain.com] [-d domain.com]
-                       [-p domains.txt] [-r domains.txt] [-b domains.txt] [-w https://domain.com]
-                       [-wc https://domain.com] [-fi https://domain.com] [-fm https://domain.com]
-                       [-na https://domain.com] [-ri IP] [-rim IP] [-sc domain.com] [-co domains.txt]
-                       [-hh domain.com] [-sh domain.com] [-ed domain.com] [-smu domain.com] [-rd domain list]
-                       [-ips domain list] [-dinfo domain list] [-isubs domain list] [-pspider domain.com]
-                       [-nft domains.txt] [-ph domain.txt]
+# USAGE 
+
+```
+usage: spyhunt.py [-h] [-sv filename.txt] [-s domain.com] [-j domain.com] [-t domain.com] [-d domain.com]
+                  [-p domains.txt] [-r domains.txt] [-b domains.txt] [-w https://domain.com]
+                  [-wc https://domain.com] [-fi https://domain.com] [-fm https://domain.com]
+                  [-na https://domain.com] [-ri IP] [-rim IP] [-sc domain.com] [-co domains.txt]
+                  [-hh domain.com] [-sh domain.com] [-ed domain.com] [-smu domain.com] [-rd domain list]
+                  [-ips domain list] [-dinfo domain list] [-isubs domain list] [-pspider domain.com]
+                  [-nft domains.txt] [-ph domain.txt]
 
 options:
   -h, --help            show this help message and exit
@@ -74,4 +79,49 @@ options:
   -nft domains.txt, --not_found domains.txt
                         check for 404 status code
   -ph domain.txt, --pathhunt domain.txt
-                        check for directory traversal                  
+                        check for directory traversal      
+  -n domain.com or IP, --nmap domain.com or IP
+                        Scan a target with nmap
+  -api domain.com, --api_fuzzer domain.com
+                        Look for API endpoints
+  -sho domain.com, --shodan domain.com
+                        Recon with shodan
+  -fp domain.com, --forbiddenpass domain.com
+                        Bypass 403 forbidden        
+```
+
+
+# EXAMPLE
+
+Scan for subdomains and save the output to a file.
+```
+python3 spyhunt.py -s yahoo.com --save filename.txt
+```
+Scan for javascript files 
+```
+python3 spyhunt.py -j yahoo.com
+```
+Scan for dns records
+```
+python3 spyhunt.py -d yahoo.com
+```
+Scan for FavIcon hashes 
+```
+python3 spyhunt.py -fi domain.com
+```
+Web Crawler
+```
+python3 spyhunt.py -wc https://www.domain.com
+```
+Broken Links
+```
+python3 spyhunt.py -b https://www.domain.com
+```
+Cors Misconfiguration Scan
+```
+python3 spyhunt.py -co domains.txt
+```
+Host Header Injection
+```
+python3 spyhunt.py -hh domains.txt
+
