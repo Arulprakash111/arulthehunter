@@ -95,33 +95,33 @@ options:
 
 Scan for subdomains and save the output to a file.
 ```
-python3 spyhunt.py -s yahoo.com --save filename.txt
+python3 arulthehunter.py -s yahoo.com --save filename.txt
 ```
 Scan for javascript files 
 ```
-python3 spyhunt.py -j yahoo.com
+python3 arulthehunter.py -j yahoo.com
 ```
 Scan for dns records
 ```
-python3 spyhunt.py -d yahoo.com
+python3 arulthehunter.py -d yahoo.com
 ```
 Scan for FavIcon hashes 
 ```
-python3 spyhunt.py -fi domain.com
+python3 arulthehunter.py -fi domain.com
 ```
 Web Crawler
 ```
-python3 spyhunt.py -wc https://www.domain.com
+python3 arulthehunter.py -wc https://www.domain.com
 ```
 Broken Links
 ```
-python3 spyhunt.py -b https://www.domain.com
+python3 arulthehunter.py -b https://www.domain.com
 ```
 Cors Misconfiguration Scan
 ```
-python3 spyhunt.py -co domains.txt
+python3 arulthehunter.py -co domains.txt
 ```
 Host Header Injection
 ```
-python3 spyhunt.py -hh domains.txt
+python3 arulthehunter.py -hh domains.txt
 
