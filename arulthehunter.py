@@ -6,6 +6,8 @@ from bs4 import BeautifulSoup
 from multiprocessing.pool import ThreadPool
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse, urljoin
+from modules import useragent_list
+from modules import sub_output
 import concurrent.futures
 import multiprocessing
 import os.path
@@ -23,13 +25,15 @@ import urllib3
 import warnings
 import re
 import execjs
+import nmap3
+import json
+import shodan
 
 warnings.filterwarnings(action='ignore',module='bs4')
 
 requests.packages.urllib3.disable_warnings()
 
 banner = """
-
 
                   _    _   _              _                 _            
   __ _ _ __ _   _| |  | |_| |__   ___    | |__  _   _ _ __ | |_ ___ _ __ 
@@ -40,6 +44,7 @@ banner = """
 
 V 1.8
 By ArulPrakash.R
+
 
 """
 
@@ -78,10 +83,6 @@ parser.add_argument('-d', '--dns',
 
 parser.add_argument('-p', '--probe',
                     type=str, help='probe domains.',
-                    metavar='domains.txt')
-
-parser.add_argument('-a', '--aquatone',
-                    type=str, help='take screenshots of domains.',
                     metavar='domains.txt')
 
 parser.add_argument('-r', '--redirects',
@@ -164,13 +165,35 @@ parser.add_argument('-pspider', '--paramspider',
                     type=str, help='extract parameters from a domain',
                     metavar='domain.com')
 
-
 parser.add_argument('-nft', '--not_found',
                     type=str, help='check for 404 status code',
                     metavar='domains.txt')
 
+parser.add_argument('-ph', '--pathhunt',
+                    type=str, help='check for directory traversal',
+                    metavar='domain.txt')
+
+parser.add_argument('-n', '--nmap',
+                    type=str, help='Scan a target with nmap',
+                    metavar='domain.com or IP')
+
+parser.add_argument('-api', '--api_fuzzer',
+                    type=str, help='Look for API endpoints',
+                    metavar='domain.com')
+
+parser.add_argument('-sho', '--shodan',
+                    type=str, help='Recon with shodan',
+                    metavar='domain.com')
+
+parser.add_argument('-fp', '--forbiddenpass',
+                    type=str, help='Bypass 403 forbidden',
+                    metavar='domain.com')
+
+
 args = parser.parse_args()
 
+user_agent = useragent_list.get_useragent()
+header = {"User-Agent": user_agent}
 
 
 if args.s:
@@ -201,7 +224,7 @@ if args.s:
             certsh.writelines(certshout)
     else:
         commands(f"subfinder -d {args.s}")
-        commands(f"./tools/assetfinder -subs-only {args.s} | uniq | sort")
+        commands(f"assetfinder -subs-only {args.s} | uniq | sort")
         commands(f"./scripts/spotter.sh {args.s} | uniq | sort")
         commands(f"./scripts/certsh.sh {args.s} | uniq | sort") 
 
@@ -239,21 +262,24 @@ if args.favicon:
         print(hash)
 
 if args.enumeratedomain:
-    server = []
-    r = requests.get(f"{args.enumeratedomain}", verify=False) 
-    domain = args.enumeratedomain
-    if "https://" in domain:
-        domain = domain.replace("https://", "")
-    if "http://" in domain:
-        domain = domain.replace("http://", "")
-    ip = socket.gethostbyname(domain)
-    for value, key in r.headers.items():
-        if value == "Server" or value == "server":
-            server.append(key)
-    if server:
-        print(f"{Fore.WHITE}{args.enumeratedomain}{Fore.MAGENTA}: {Fore.CYAN}[{ip}] {Fore.WHITE}Server:{Fore.GREEN} {server}")
-    else:
-        print(f"{Fore.WHITE}{args.enumeratedomain}{Fore.MAGENTA}: {Fore.CYAN}[{ip}]")
+    try:
+        server = []
+        r = requests.get(f"{args.enumeratedomain}", verify=False, headers=header) 
+        domain = args.enumeratedomain
+        if "https://" in domain:
+            domain = domain.replace("https://", "")
+        if "http://" in domain:
+            domain = domain.replace("http://", "")
+        ip = socket.gethostbyname(domain)
+        for value, key in r.headers.items():
+            if value == "Server" or value == "server":
+                server.append(key)
+        if server:
+            print(f"{Fore.WHITE}{args.enumeratedomain}{Fore.MAGENTA}: {Fore.CYAN}[{ip}] {Fore.WHITE}Server:{Fore.GREEN} {server}")
+        else:
+            print(f"{Fore.WHITE}{args.enumeratedomain}{Fore.MAGENTA}: {Fore.CYAN}[{ip}]")
+    except requests.exceptions.MissingSchema as e:
+        print(e)
     
 
 if args.faviconmulti:
@@ -262,12 +288,12 @@ if args.faviconmulti:
         domains = [x.strip() for x in f.readlines()]
         try:
             for domainlist in domains:
-                response = requests.get(f'{domainlist}/favicon.ico', verify=False, timeout=60)
+                response = requests.get(f'{domainlist}/favicon.ico', verify=False, timeout=60, headers=header)
                 if response.status_code == 200:
                     favicon = codecs.encode(response.content,"base64")
                     hash = mmh3.hash(favicon)
                     hashes = {}
-                response = requests.get(f'{domainlist}/favicon.ico', verify=False, timeout=5)
+                response = requests.get(f'{domainlist}/favicon.ico', verify=False, timeout=5, headers=header)
                 if response.status_code == 200:
                     favicon = codecs.encode(response.content,"base64")
                     hash = mmh3.hash(favicon)
@@ -303,83 +329,99 @@ if args.faviconmulti:
             pass
 
 if args.corsmisconfig:
-    print(f"\t\t\t{Fore.CYAN}CORS {Fore.MAGENTA}Misconfiguration {Fore.GREEN}Module\n\n")
-    with open(f"{args.corsmisconfig}", "r") as f:
-        domains = (x.strip() for x in f.readlines())
+    print(f"\\t\\t\\t{Fore.CYAN}CORS {Fore.MAGENTA}Misconfiguration {Fore.GREEN}Module\\n\\n")
+
+    with open(args.corsmisconfig, "r") as f:
+        domains = [x.strip() for x in f.readlines()]
+
+    def check_cors(domainlist):
         try:
-            for domainlist in domains:
-                for pos, web in enumerate(domainlist):
-                    if pos == 0:
-                        original_payload = []
-                        payload = []
-                        remove_com = domainlist.replace(".com", "")
-                        payload.append(f"{remove_com}evil.com")
-                        payload.append("evil.com")
-                        header = {'Origin': f"{payload}"}
-                    else:
-                        pass
-                [original_payload.append(i) for i in payload if i not in original_payload]
-                original_payload2 = ", ".join(original_payload)
-                session = requests.Session()
-                session.max_redirects = 10
-                resp = session.get(f"{domainlist}", verify=False, headers=header)
-                for value, key in resp.headers.items():
-                    if value == "Access-Control-Allow-Origin":
-                        AllowOrigin = key
-                        if AllowOrigin == f"{payload}":
-                            print(f"{Fore.YELLOW}VULNERABLE: {Fore.GREEN}{domainlist} {Fore.CYAN}PAYLOADS: {Fore.MAGENTA}{original_payload2}")
-                print(f"{Fore.CYAN}NOT VULNERABLE: {Fore.GREEN} {domainlist} {Fore.CYAN}PAYLOADS: {Fore.MAGENTA}{original_payload2}")
-        except requests.exceptions.TooManyRedirects:
-            pass
-        except requests.exceptions.ConnectionError:
-            pass
-        except requests.exceptions.SSLError:
-            pass
+            payload = []
+            payload.append(domainlist)
+            payload.append("evil.com")
+            header = {'Origin': ', '.join(payload)}  # Constructing the header correctly here
+
+            session = requests.Session()
+            session.max_redirects = 10
+            resp = session.get(domainlist, verify=False, headers=header, timeout=(5, 10))
+
+            for value, key in resp.headers.items():
+                if value == "Access-Control-Allow-Origin" and key == header['Origin']:
+                    print(f"{Fore.YELLOW}VULNERABLE: {Fore.GREEN}{domainlist} {Fore.CYAN}PAYLOADS: {Fore.MAGENTA}{', '.join(payload)}")
+                    return
+            print(f"{Fore.CYAN}NOT VULNERABLE: {Fore.GREEN}{domainlist} {Fore.CYAN}PAYLOADS: {Fore.MAGENTA}{', '.join(payload)}")
+
+        except requests.exceptions.RequestException as e:
+            if isinstance(e, requests.exceptions.ConnectionError):
+                print(f"{Fore.RED}Connection error occurred while processing {domainlist}")
+            else:
+                print(f"{Fore.LIGHTBLACK_EX}Error occurred while processing {domainlist}: {str(e)}")
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [executor.submit(check_cors, domain) for domain in domains]
+
+    for future in futures:
+        try:
+            future.result()
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
 
 if args.hostheaderinjection:
-    print(f"{Fore.MAGENTA}\t\t Host Header Injection \n")
-    redirect = ["301", "302", "303", "307", "308"]
+    print(f"{Fore.MAGENTA}\\t\\t Host Header Injection \\n")
+    redirect = {"301", "302", "303", "307", "308"}  # Use a set for faster lookup
+    timeout = 5  # Timeout value in seconds
     with open(f"{args.hostheaderinjection}", "r") as f:
         domains = [x.strip() for x in f.readlines()]
-        payload = b"google.com" 
-        print(f"{Fore.WHITE} Checking For {Fore.CYAN}X-Forwarded-Host {Fore.WHITE}and {Fore.CYAN}Host {Fore.WHITE}injections.....\n")
+    payload = b"google.com"
+    print(f"{Fore.WHITE} Checking For {Fore.CYAN}X-Forwarded-Host {Fore.WHITE}and {Fore.CYAN}Host {Fore.WHITE}injections.....\\n")
+
+    def check_host_header_injection(domainlist):
+        vuln_domain = []
+        session = requests.Session()
+        header = {"X-Forwarded-Host": "google.com"}
+        header2 = {"Host": "google.com"}
         try:
-            for domainlist in domains:
-                session = requests.Session()
-                header = {"X-Forwarded-Host": "google.com"}
-                header2 = {"Host": "google.com"}
-                resp = session.get(f"{domainlist}", verify=False, headers=header)
-                resp2 = session.get(f"{domainlist}", verify=False, headers=header2)
-                resp_content = resp.content
-                resp_status = resp.status_code
-                resp2_content = resp2.content
-                for value, key in resp.headers.items():
-                    for pos, web in enumerate(domainlist):
-                        if pos == 0:
-                            vuln_domain = []
-                            duplicates_none = []  
-                            if value == "Location" and key == payload and resp.status_code in redirect:
-                                vuln_domain.append(domainlist)
-                            if payload in resp_content or key == payload:
-                                vuln_domain.append(domainlist)
-                        else:
-                            pass
-                for value2, key2 in resp2.headers.items():
-                    for pos, web in enumerate(domainlist):
-                        if pos == 0:
-                            if payload in resp2_content or key == payload:
-                                vuln_domain.append(domainlist)
-                        else:
-                            pass
-                if vuln_domain:
-                    [duplicates_none.append(x) for x in vuln_domain if x not in duplicates_none]
-                    duplicates_none = ", ".join(duplicates_none)
-                    print(f"{Fore.RED} POSSIBLE {Fore.YELLOW} Host Header Injection Detected {Fore.MAGENTA}- {Fore.GREEN} {duplicates_none}")
-                print(f"{Fore.CYAN} No Detection {Fore.MAGENTA}- {Fore.GREEN} {(domainlist)}{Fore.BLUE} ({resp_status})")
-        except requests.exceptions.TooManyRedirects:
-            pass
-        except requests.exceptions.InvalidSchema:
-            pass
+            start_time = time.time()
+            resp = session.get(f"{domainlist}", verify=False, headers=header, timeout=timeout)
+            resp2 = session.get(f"{domainlist}", verify=False, headers=header2, timeout=timeout)
+            elapsed_time = time.time() - start_time
+            resp_content = resp.content
+            resp_status = resp.status_code
+            resp2_content = resp2.content
+
+            for value, key in resp.headers.items():
+                if value == "Location" and key == payload and resp_status in redirect:
+                    vuln_domain.append(domainlist)
+                if payload in resp_content or key == payload:
+                    vuln_domain.append(domainlist)
+
+            for value2, key2 in resp2.headers.items():
+                if payload in resp2_content or key == payload:
+                    vuln_domain.append(domainlist)
+
+            if vuln_domain:
+                duplicates_none = list(set(vuln_domain))  # Remove duplicates
+                duplicates_none = ", ".join(duplicates_none)
+                print(f"{Fore.RED} POSSIBLE {Fore.YELLOW} Host Header Injection Detected {Fore.MAGENTA}- {Fore.GREEN} {duplicates_none}")
+
+            print(f"{Fore.CYAN} No Detection {Fore.MAGENTA}- {Fore.GREEN} {(domainlist)}{Fore.BLUE} ({resp_status})")
+
+            if elapsed_time > timeout:
+                print(f"{Fore.LIGHTBLACK_EX} Timeout Exceeded for {domainlist}. Skipping...")
+
+        except requests.exceptions.RequestException as e:
+            print(f"{Fore.LIGHTBLACK_EX} Error occurred while accessing {domainlist}: {e}")
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [executor.submit(check_host_header_injection, domain) for domain in domains]
+
+    for future in futures:
+        try:
+            future.result()
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
 
 if args.securityheaders:
     print(f"{Fore.MAGENTA}\t\t Security Headers\n")
@@ -437,58 +479,6 @@ if args.j:
         if not path.exists(f"{args.save}"):
             print(Fore.RED + "ERROR!")
     else:
-        response = requests.get(args.j)
-        html_content = response.text
-        pattern = r'<script\s+(?:[^>]*?\s+)?src=(["\'])(.*?)\1'
-
-        def extract_js(html_content):
-            matches = re.findall(pattern, html_content, re.IGNORECASE)
-            js_urls = []
-            for match in matches:
-                relative_url = match[1]
-                if relative_url.startswith(('http://', 'https://')):
-                    full_url = relative_url
-                elif relative_url.startswith('//'):
-                    parsed_base_url = urlparse(args.j)
-                    full_url = f"{parsed_base_url.scheme}:{relative_url}"
-                else:
-                    full_url = urljoin(args.j, relative_url)
-                js_urls.append(full_url)
-            return js_urls
-
-        def extract_endpoints(js_url):
-            response = requests.get(js_url)
-            js_content = response.text
-
-            context = execjs.get().compile(js_content)
-            urls = [item for item in context.eval("Object.values(this)") if isinstance(item, str) and item.startswith(('http://', 'https://'))]
-
-            return urls
-
-        
-        with ThreadPoolExecutor() as executor:
-             js_urls = executor.submit(extract_js, html_content).result()
-             
-        try:
-            all_endpoints = []
-            with ThreadPoolExecutor() as executor:
-                futures = [executor.submit(extract_endpoints, js_url) for js_url in js_urls]
-                for future in concurrent.futures.as_completed(futures):
-                    endpoints = future.result()
-                    all_endpoints.extend(endpoints)
-        except execjs._exceptions.ProcessExitedWithNonZeroStatus:
-            pass
-
-        for js_url in js_urls:
-            print(js_url)
-
-        print("\n\n")
-        print("-------- ENDPOINTS -----------")
-        print("\n\n")
-
-        for endpoint in all_endpoints:
-            print(f"{endpoint}\n")
-
         commands(f"echo {args.j} | waybackurls | grep '\\.js$' | anew")
         commands(f"echo {args.j} | gau | grep -Eo 'https?://\\S+?\\.js' | anew")
 
@@ -512,7 +502,7 @@ if args.dns:
 if args.probe:
     if args.save:
         print(Fore.CYAN + "Saving output to {}...".format(args.save))
-        commands(f'cat {args.probe} | httprobe | anew >> {args.save}')
+        commands(f'cat {args.probe} | httprobe -c 50 | anew >> {args.save}')
         if path.exists(f"{args.save}"):
             print(Fore.GREEN + "DONE!")
         if not path.exists(f"{args.save}"):
@@ -531,14 +521,6 @@ if args.redirects:
             print(Fore.RED + "ERROR!")
     else:
         commands(f"cat {args.redirects} | httpx -silent -location -mc 301,302")   
-
-
-if args.aquatone:
-    if path.exists("aquatone"):
-        pass
-    if not path.exists("aquatone"):
-        commands("mkdir aquatone")
-    commands(f"cat {args.aquatone} | aquatone")
 
 
 if args.brokenlinks:
@@ -580,18 +562,34 @@ if args.redirect:
                 print(domainlist)
 
 if args.ipaddresses:
+    ip_list = []
+
     with open(f"{args.ipaddresses}", "r") as f:
         domains = [x.strip() for x in f.readlines()]
-    for domain_list in domains:
+
+    def scan(domain: str):
         try:
-            ips = socket.gethostbyname(domain_list)
-            print(f"{Fore.GREEN} {domain_list} {Fore.WHITE}- {Fore.CYAN}{ips}")
+            ips = socket.gethostbyname(domain)
+            ip_list.append(ips)
+            print(f"{Fore.GREEN} {domain} {Fore.WHITE}- {Fore.CYAN}{ips}")
         except socket.gaierror:
             pass
+        except UnicodeError:
+            pass
+
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        futures = [executor.submit(scan, domain) for domain in domains]
+        
+        for future in futures:
+            future.result()
+    
+    with open("ips.txt", "w") as file:
+        ip_list = list(dict.fromkeys(ip_list))
+        for iplist in ip_list:
+            file.write(f"{iplist}\n")
+
 
 if args.domaininfo:
-    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36"
-    header = {"User-Agent": user_agent}
     with open(f"{args.domaininfo}", "r") as f:
         domains = [x.strip() for x in f.readlines()]
     ip_list = []
@@ -677,10 +675,7 @@ if args.importantsubdomains:
                 f.writelines(f"{goodsubs}\n")
 
 
-
 if args.not_found:
-    user_agent_ = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36"
-    header = {"User-Agent": user_agent_}
     session = requests.Session()
     session.headers.update(header)
 
@@ -710,3 +705,143 @@ if args.not_found:
 
 if args.paramspider:
     commands(f"paramspider -d {args.paramspider}")
+
+if args.pathhunt:
+    def commands(cmd):
+        try:
+            subprocess.check_call(cmd, shell=True)
+        except:
+            pass
+    pathhunt_path = os.path.abspath(os.getcwd())
+    commands(f"python3 {pathhunt_path}/tools/pathhunt.py -t {args.pathhunt}")   
+    
+if args.nmap:
+    print(f"{Fore.WHITE}Scanning {Fore.CYAN}{args.nmap}\n")
+    nmap = nmap3.Nmap()
+    results = nmap.nmap_version_detection(f"{args.nmap}")
+
+    with open("nmap_results.json", "w") as f:
+        json.dump(results, f, indent=4)
+
+    with open('nmap_results.json', 'r') as file:
+        data = json.load(file)
+
+    for host, host_data in data.items():
+        if host != "runtime" and host != "stats" and host != "task_results":
+            ports = host_data.get("ports", [])
+            for port in ports:
+                portid = port.get("portid")
+                service = port.get("service", {})
+                product = service.get("product")
+                print(f"{Fore.WHITE}Port: {Fore.CYAN}{portid}, {Fore.WHITE}Product: {Fore.CYAN}{product}")
+
+if args.api_fuzzer:
+    s = requests.Session()
+    with open("payloads/api-endpoints.txt", "r") as file:
+        api_endpoints = [x.strip() for x in file.readlines()]
+    
+    def check_endpoint(endpoint):
+        r = s.get(f"{args.api_fuzzer}/{endpoint}", verify=False, headers=header)
+        if r.status_code == 200:
+            results = f"{Fore.GREEN}{args.api_fuzzer}/{endpoint}"
+        else:
+            results = f"{args.api_fuzzer}/{endpoint}"
+        
+        return results
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [executor.submit(check_endpoint, endpoint) for endpoint in api_endpoints]
+        for future in concurrent.futures.as_completed(futures):
+            print(future.result())
+
+if args.shodan:
+    key = input("Shodan Key: ")
+    print("\n")
+    api = shodan.Shodan(str(key))
+    try:
+        results = api.search(args.shodan)
+        results_ = []
+        results_5 = []
+        for result in results['matches']:
+            results_.append(result['ip_str'])
+        results_5.append(results_[0:50])
+        if results_5:
+            print(f"{Fore.MAGENTA}[+] {Fore.CYAN}-{Fore.WHITE} Shodan IPs: {Fore.GREEN}{', '.join(map(str,results_5))}")
+        if not results_5:
+            pass
+    except shodan.APIError:
+        print(f"{Fore.MAGENTA}[+] {Fore.CYAN}-{Fore.YELLOW} Shodan Key: {Fore.GREEN} Invalid Key")
+    except socket.herror:
+        pass
+
+
+if args.forbiddenpass:
+    def word_list(wordlist: str) -> str:
+        try:
+            with open(wordlist, "r") as f:
+                data = [x.strip() for x in f.readlines()] 
+            return data
+        except FileNotFoundError as e:
+            print(f"File not found: {e}")
+
+    wordlist = word_list("payloads/bypasses.txt")
+
+    def header_bypass():
+        headers = [
+            {'User-Agent': user_agent},
+            {'User-Agent': str(user_agent), 'X-Custom-IP-Authorization': '127.0.0.1'},
+            {'User-Agent': str(user_agent), 'X-Forwarded-For': 'http://127.0.0.1'},
+            {'User-Agent': str(user_agent), 'X-Forwarded-For': '127.0.0.1:80'},
+            {'User-Agent': str(user_agent), 'X-Originally-Forwarded-For': '127.0.0.1'},
+            {'User-Agent': str(user_agent), 'X-Originating-': 'http://127.0.0.1'},
+            {'User-Agent': str(user_agent), 'X-Originating-IP': '127.0.0.1'},
+            {'User-Agent': str(user_agent), 'True-Client-IP': '127.0.0.1'},
+            {'User-Agent': str(user_agent), 'X-WAP-Profile': '127.0.0.1'},
+            {'User-Agent': str(user_agent), 'X-Arbitrary': 'http://127.0.0.1'},
+            {'User-Agent': str(user_agent), 'X-HTTP-DestinationURL': 'http://127.0.0.1'},
+            {'User-Agent': str(user_agent), 'X-Forwarded-Proto': 'http://127.0.0.1'},
+            {'User-Agent': str(user_agent), 'Destination': '127.0.0.1'},
+            {'User-Agent': str(user_agent), 'X-Remote-IP': '127.0.0.1'},
+            {'User-Agent': str(user_agent), 'X-Client-IP': 'http://127.0.0.1'},
+            {'User-Agent': str(user_agent), 'X-Host': 'http://127.0.0.1'},
+            {'User-Agent': str(user_agent), 'X-Forwarded-Host': 'http://127.0.0.1'},
+            {'User-Agent': str(user_agent), 'X-Forwarded-Port': '4443'},
+            {'User-Agent': str(user_agent), 'X-Forwarded-Port': '80'},
+            {'User-Agent': str(user_agent), 'X-Forwarded-Port': '8080'},
+            {'User-Agent': str(user_agent), 'X-Forwarded-Port': '8443'},
+            {'User-Agent': str(user_agent), 'X-ProxyUser-Ip': '127.0.0.1'},
+            {'User-Agent': str(user_agent), 'Client-IP': '127.0.0.1'}
+
+        ]
+        return headers
+    
+    def do_request(url: str, stream=False):
+        headers = header_bypass()
+        try:
+            for header in headers:
+                if stream:
+                    s = requests.Session()
+                    r = s.get(url, stream=True, headers=header)
+                else:
+                    s = requests.Session()
+                    r = s.get(url, headers=header)
+                if r.status_code == 200:
+                    print(Fore.WHITE + url + ' ' + json.dumps(list(header.items())[-1]) + Fore.GREEN + " [{}]".format(r.status_code))
+                else:
+                    print(Fore.WHITE + url + ' ' + json.dumps(list(header.items())[-1]) + Fore.RED + " [{}]".format(r.status_code))
+        except requests.exceptions.ConnectionError as ce_error:
+            pass
+        except requests.exceptions.Timeout as t_error:
+            print("Connection Timeout Error: ", t_error)
+            pass
+        except requests.exceptions.RequestException as req_err:
+            print("Some Ambiguous Exception:", req_err)
+            pass
+
+    def main(wordlist):
+        for bypass in wordlist:
+            links = f"{args.forbiddenpass}{bypass}"
+            do_request(links)
+
+    if __name__ == "__main__":
+        main(wordlist)
